@@ -50,7 +50,11 @@ def prepare_source_file(
     )
 
     storage = JobFileStorage()
-    _assert_source_file_within_size_limit(storage, job_context.s3_key)
+    complete_source = job_context.job_metadata.get("complete_source") is not None
+    _assert_source_file_within_size_limit(
+        storage, job_context.s3_key,
+        max_bytes=20 * 1024 * 1024 if complete_source else None,
+    )
     local_file_path = storage.download_upload_to_temp(
         job_context.s3_key,
         suffix=file_extension,
@@ -69,6 +73,16 @@ def prepare_source_file(
         f"internal_filename={prepared_parse_input.internal_filename}, "
         f"local_path={prepared_parse_input.file_path}"
     )
+
+    if complete_source:
+        # The manifest input digest must cover the exact uploaded bytes, not a
+        # converted or repaired Office package. The bounded exporter validates it.
+        return PreparedSourceFile(
+            source_file_name=source_file_name,
+            internal_parse_name=prepared_parse_input.internal_filename,
+            local_file_path=prepared_parse_input.file_path,
+            file_extension=file_extension,
+        )
 
     normalized_source = normalize_office_source(prepared_parse_input.file_path)
     if normalized_source.conversion is not None:
@@ -89,6 +103,7 @@ def prepare_source_file(
 def _assert_source_file_within_size_limit(
     storage: JobFileStorage,
     s3_key: str,
+    max_bytes: int | None = None,
 ) -> None:
     file_info = storage.verify_upload_exists(s3_key)
     if not file_info.get("exists"):
@@ -103,8 +118,9 @@ def _assert_source_file_within_size_limit(
     raw_file_size = file_info.get("size", 0)
     file_size = raw_file_size if isinstance(raw_file_size, int) else 0
     file_extension = os.path.splitext(s3_key)[1].lower()
-    if file_size > settings.MAX_FILE_SIZE:
-        limit_mb = settings.MAX_FILE_SIZE // (1024 * 1024)
+    size_limit = min(settings.MAX_FILE_SIZE, max_bytes) if max_bytes is not None else settings.MAX_FILE_SIZE
+    if file_size > size_limit:
+        limit_mb = size_limit // (1024 * 1024)
         raise ValidationException(
             user_message=build_file_size_limit_message(
                 limit_mb=limit_mb,
@@ -115,7 +131,7 @@ def _assert_source_file_within_size_limit(
                     "field": "file_size",
                     "description": (
                         f"Size {file_size} bytes exceeds limit of "
-                        f"{settings.MAX_FILE_SIZE} bytes"
+                        f"{size_limit} bytes"
                     ),
                 }
             ],

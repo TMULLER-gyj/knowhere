@@ -119,6 +119,15 @@ def _run_parse_job(
             input_dir=task_workspace.input_dir,
         )
 
+        if job_context.job_metadata.get("complete_source") is not None:
+            from app.services.complete_source.processing import process_complete_source
+
+            return process_complete_source(
+                job_id=job_id, job_context=job_context, source=prepared_source,
+                output_dir=task_workspace.output_dir, lifecycle_service=lifecycle_service,
+                result_storage=get_result_storage(),
+            )
+
         workload_estimate = PageEstimator.estimate_workload(prepared_source.local_file_path)
         page_count = workload_estimate.page_count
         logger.info(
