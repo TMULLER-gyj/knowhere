@@ -6,6 +6,7 @@ from typing import Any, Dict, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from shared.models.schemas.llm_config import LLMConfig
+from shared.models.schemas.complete_source import CompleteSourceRequest
 
 
 class WebhookConfig(BaseModel):
@@ -95,6 +96,11 @@ class JobCreate(JobCreateBase):
 class JobCreateV2(JobCreateBase):
     """Public v2 request payload for creating a job."""
 
+    complete_source: CompleteSourceRequest | None = Field(
+        None,
+        description="Complete immutable source export; file-only, no retrieval or LLM processing",
+    )
+
     llm_config: Optional[LLMConfig] = Field(
         None,
         description=(
@@ -162,6 +168,9 @@ class JobResultResponse(BaseModel):
 
     # Status-related fields
     progress: Optional[Dict[str, Any]] = Field(None, description="Progress information")
+    upload_url: str | None = Field(None, description="Fresh upload URL, complete-source waiting-file jobs only")
+    upload_headers: dict[str, str] | None = Field(None, description="Required upload headers")
+    expires_in: int | None = Field(None, description="Upload URL expiration in seconds")
 
     # Error field - uses StandardErrorObject for embedded error pattern
     error: Optional[StandardErrorObject] = Field(

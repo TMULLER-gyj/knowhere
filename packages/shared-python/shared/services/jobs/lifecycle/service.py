@@ -53,6 +53,7 @@ class SyncJobLifecycleService:
         delivery_mode: str = "url",
         section_summaries: Optional[Dict[str, str]] = None,
         document_top_summary: Optional[str] = None,
+        publish_to_retrieval: bool = True,
     ) -> Dict[str, Any]:
         """Finalize a successful job in a single atomic transaction.
 
@@ -80,6 +81,7 @@ class SyncJobLifecycleService:
                 delivery_mode=delivery_mode,
                 section_summaries=section_summaries,
                 document_top_summary=document_top_summary,
+                publish_to_retrieval=publish_to_retrieval,
             ),
             should_commit=lambda finalization: finalization.response.should_commit(),
             build_response=lambda finalization: finalization.response.to_dict(),

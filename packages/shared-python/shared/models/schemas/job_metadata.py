@@ -103,6 +103,9 @@ class JobMetadataHelper:
         }
         if llm_config_payload is not None:
             metadata["llm_config"] = llm_config_payload
+        complete_source = getattr(request, "complete_source", None)
+        if complete_source is not None:
+            metadata["complete_source"] = complete_source.model_dump(exclude_none=True)
         if resolved_page_memory_config is not None:
             metadata["page_memory_config"] = resolved_page_memory_config
         metadata.update(kwargs)

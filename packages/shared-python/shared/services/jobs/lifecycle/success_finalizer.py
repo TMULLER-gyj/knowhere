@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from shared.core.state_machine.service_sync import SyncStateMachineService
 from shared.services.jobs.lifecycle.post_commit_effects import PostCommitEffectPlan
-from shared.services.jobs.lifecycle.publication import SyncJobPublicationFinalizer
+from shared.services.jobs.lifecycle.publication import JobPublicationOutcome, SyncJobPublicationFinalizer
 from shared.services.jobs.lifecycle.result_writer import SyncJobResultWriter
 from shared.services.jobs.lifecycle.webhook_outbox import SyncJobWebhookOutbox
 from shared.utils.json_utils import remove_nul_characters
@@ -81,6 +81,7 @@ class SyncJobSuccessFinalizer:
         delivery_mode: str,
         section_summaries: dict[str, str] | None,
         document_top_summary: str | None = None,
+        publish_to_retrieval: bool = True,
     ) -> JobSuccessFinalization:
         safe_chunks = cast(
             list[dict[str, Any]], remove_nul_characters(chunks)
@@ -109,7 +110,7 @@ class SyncJobSuccessFinalizer:
             chunks=safe_chunks,
             section_summaries=safe_section_summaries,
             document_top_summary=safe_document_top_summary,
-        )
+        ) if publish_to_retrieval else JobPublicationOutcome(None, None)
 
         transition_outcome = self._state_machine.mark_completed_outcome(
             db,
