@@ -40,6 +40,7 @@ from shared.core.exceptions.domain_exceptions import (
 )
 from shared.core.exceptions.webhook_exceptions import WebhookConfigException
 from shared.models.schemas.job import ConfirmUploadRequest, JobCreateBase, JobResponse
+from shared.models.schemas.complete_source import COMPLETE_SOURCE_EXTENSIONS, CompleteSourceRequest
 from shared.models.schemas.job_metadata import JobMetadataHelper
 from shared.services.http.url_file_type import resolve_file_extension_async
 from shared.services.http.url_security import validate_http_url_and_resolve_ip_async
@@ -190,6 +191,20 @@ class DocumentIngestionService:
         api_version: ApiVersion,
     ) -> str:
         _validate_public_mode_selector_fields(payload, api_version=api_version)
+        complete_source = getattr(payload, "complete_source", None)
+        if isinstance(complete_source, CompleteSourceRequest):
+            extension = os.path.splitext(payload.file_name or "")[1].lower()
+            if (
+                api_version != "v2"
+                or payload.source_type != "file"
+                or payload.document_id is not None
+                or getattr(payload, "llm_config", None) is not None
+                or extension not in COMPLETE_SOURCE_EXTENSIONS[complete_source.kind]
+            ):
+                raise ValidationException(
+                    user_message="Invalid complete-source request or unsupported source format",
+                    violations=[{"field": "complete_source", "description": "Use a supported file kind with no document update or LLM override"}],
+                )
 
         if payload.source_type == "file" and not payload.file_name:
             raise ValidationException(
@@ -228,6 +243,7 @@ class DocumentIngestionService:
         if (
             payload.source_type == "file"
             and payload.file_name
+            and complete_source is None
             and not _is_supported_file_name(payload.file_name)
         ):
             raise ValidationException(

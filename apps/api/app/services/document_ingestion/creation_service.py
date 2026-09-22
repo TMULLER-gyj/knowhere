@@ -222,14 +222,14 @@ class DocumentIngestionCreationService:
             job_metadata=scope.job_metadata,
         )
 
-        logger.info(f"Job {job_id} upload_url returned to client: {upload_url}")
+        logger.info(f"Job {job_id} upload instructions returned to client")
         return _build_job_response(
             job_id=job_id,
             job=job,
             source_type="file",
             data_id=payload.data_id,
             namespace=scope.namespace,
-            document_id=scope.document_id,
+            document_id=None if getattr(payload, "complete_source", None) is not None else scope.document_id,
             upload_url=upload_url,
             upload_headers=upload_headers,
             expires_in=expires_in,

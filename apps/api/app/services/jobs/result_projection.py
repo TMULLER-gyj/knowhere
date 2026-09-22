@@ -10,6 +10,7 @@ from shared.core.exceptions.domain_exceptions import JobOperationException
 from shared.models.schemas.job import JobResultResponse, StandardErrorObject
 from shared.models.schemas.job_metadata import JobMetadataHelper
 from shared.services.jobs.result_delivery import JobResultDeliveryResolver
+from shared.services.storage.file_upload_service import FileUploadService
 from shared.utils.error_details import normalize_error_details
 
 JobStatusValue = Literal[
@@ -48,6 +49,8 @@ def resolve_public_document_id(job: Any) -> Optional[str]:
 def resolve_job_document_id(
     job: Any, job_metadata: Optional[dict[str, Any]]
 ) -> Optional[str]:
+    if JobMetadataHelper.get_field(job_metadata, "complete_source") is not None:
+        return None
     published_document_id = resolve_public_document_id(job)
     if published_document_id:
         return published_document_id
@@ -152,6 +155,14 @@ async def build_job_result_response(
     file_name = _resolve_source_file_name(original_request)
     parsing_params = _resolve_parsing_params(job_metadata, original_request)
     result, result_url, result_url_expires_at = await _resolve_result_delivery(job)
+    upload: dict[str, Any] = {}
+    if (
+        to_job_status_value(job.status) == "waiting-file"
+        and job.source_type == "file"
+        and JobMetadataHelper.get_field(job_metadata, "complete_source") is not None
+    ):
+        extension = os.path.splitext(file_name or "")[1].lower()
+        upload = await FileUploadService().generate_upload_url(job.job_id, extension)
 
     return JobResultResponse(
         job_id=job.job_id,
@@ -162,6 +173,9 @@ async def build_job_result_response(
         data_id=JobMetadataHelper.get_data_id(job_metadata),
         created_at=require_utc(job.created_at, field_name="created_at"),
         progress=progress,
+        upload_url=upload.get("upload_url"),
+        upload_headers=upload.get("upload_headers"),
+        expires_in=upload.get("expires_in"),
         error=build_error_response(job, job_metadata),
         result=result,
         result_url=result_url,
