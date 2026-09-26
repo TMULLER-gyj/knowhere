@@ -156,12 +156,11 @@ async def build_job_result_response(
     parsing_params = _resolve_parsing_params(job_metadata, original_request)
     result, result_url, result_url_expires_at = await _resolve_result_delivery(job)
     upload: dict[str, Any] = {}
-    if (
-        to_job_status_value(job.status) == "waiting-file"
-        and job.source_type == "file"
-        and JobMetadataHelper.get_field(job_metadata, "complete_source") is not None
-    ):
-        extension = os.path.splitext(file_name or "")[1].lower()
+    if to_job_status_value(job.status) == "waiting-file" and job.source_type == "file":
+        # Complete-source and ordinary file Jobs alike: re-sign the exact object key
+        # chosen at creation, whose extension keeps the submitted file name's case.
+        stored_key = str(getattr(job, "s3_key", None) or "")
+        extension = os.path.splitext(stored_key or file_name or "")[1]
         upload = await FileUploadService().generate_upload_url(job.job_id, extension)
 
     return JobResultResponse(

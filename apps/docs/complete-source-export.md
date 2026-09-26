@@ -28,7 +28,8 @@ not a new retrieval Document.
 
 Use returned `upload_url` and `upload_headers` for the exact file bytes. While
 waiting-file, authenticated GET Job returns newly signed upload instructions
-for complete-source Jobs; no other user's Job can be read. Confirm the upload
+for the Job's own stored object key (complete-source and ordinary file Jobs
+alike); no other user's Job can be read. Confirm the upload
 with the existing confirm-upload endpoint, then poll the same Job. After `done`,
 download `result_url` and verify SHA-256 against `result.checksum`. Never forward
 the Knowhere bearer credential to object storage or save signed URLs as identity.

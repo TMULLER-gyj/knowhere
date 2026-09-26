@@ -168,7 +168,7 @@ class JobResultResponse(BaseModel):
 
     # Status-related fields
     progress: Optional[Dict[str, Any]] = Field(None, description="Progress information")
-    upload_url: str | None = Field(None, description="Fresh upload URL, complete-source waiting-file jobs only")
+    upload_url: str | None = Field(None, description="Fresh upload URL for the job's own object key; waiting-file file jobs only")
     upload_headers: dict[str, str] | None = Field(None, description="Required upload headers")
     expires_in: int | None = Field(None, description="Upload URL expiration in seconds")
 
