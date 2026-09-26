@@ -32,7 +32,9 @@ async def hydrate_connected_target_rows(
     document_scope = document_scope.excluding(exclude_document_ids)
 
     existing_chunk_ids = {
-        str(row.get('chunk_id') or '').strip()
+        (str(row.get('document_id') or '').strip(),
+         str(row.get('job_result_id') or '').strip(),
+         str(row.get('chunk_id') or '').strip())
         for row in rows
         if row.get('chunk_id')
     }
@@ -45,7 +47,7 @@ async def hydrate_connected_target_rows(
         if not document_id or not job_result_id:
             continue
         for target_id in iter_connected_target_ids(row):
-            if target_id in existing_chunk_ids:
+            if (document_id, job_result_id, target_id) in existing_chunk_ids:
                 continue
             target_ids_by_revision.setdefault((document_id, job_result_id), set()).add(
                 target_id

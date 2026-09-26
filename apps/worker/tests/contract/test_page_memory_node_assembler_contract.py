@@ -462,7 +462,7 @@ def test_page_connectto_normalizes_to_asset_chunk_id() -> None:
             "extra_metadata": {},
         },
     ]
-    df = pd.DataFrame(rows, columns=pd.Index([*PARSER_ROW_COLUMNS, "extra_metadata"]))
+    df = pd.DataFrame(rows, columns=pd.Index(PARSER_ROW_COLUMNS))
 
     chunks = dataframe_to_chunks(df)
 

@@ -27,6 +27,7 @@ from shared.core.exceptions.knowhere_exception import KnowhereException
 from shared.services.ai.prompt_service import build_prompt
 from shared.services.ai.response_process_service import eval_response
 from shared.utils.chunk_refs import build_chunk_ref
+from shared.services.chunks.evidence_provenance import join_text, marked, text_metadata
 from app.services.common.file_loading import is_remote, load_file_bytes
 from app.services.common.file_utils import path_handle
 from shared.services.ai.summary.engine import summarize, transcribe
@@ -263,7 +264,7 @@ def parse_image(
         if not base_llm_paras["summary_image"]:
             img_title = None
             image_summary = filename
-            image_content = filename
+            image_content = marked(filename, "system")
         elif is_text_image:
             # Text scan: transcribe the body (→ content) and summarize for title.
             transcribed = transcribe(
@@ -271,7 +272,7 @@ def parse_image(
                 max_tokens=ProcessingConstants.IMG_OCR_MAX_TOKENS,
                 usage_task="parser.image.transcribe",
             )
-            image_content = transcribed or filename
+            image_content = marked(transcribed, "transcription") if transcribed else marked(filename, "system")
             asset = summarize(
                 mode="asset",
                 image_paths=[abs_image_path],
@@ -293,7 +294,7 @@ def parse_image(
             )
             img_title = asset.title or None
             image_summary = asset.summary or filename
-            image_content = asset.summary or filename
+            image_content = marked(asset.summary, "generated-image-description") if asset.summary else marked(filename, "system")
 
         # 2. Decide whether to rename based on image title and filename
         img_name = path_handle((img_title or image_summary)[:20], mode="clean_single")
@@ -335,11 +336,12 @@ def parse_image(
         else final_img_name
     )
     img_ref = build_chunk_ref(relative_img_path)
-    img_bottom_content = f"{img_ref}\nImage Content:\n{image_content}"
+    img_bottom_content = join_text([marked(f"{img_ref}\nImage Content:\n", "system"), image_content])
     rows_builder = ParsedRowsBuilder()
     rows_builder.append(
         ParsedRow(
-            content=img_bottom_content,
+            content=str(img_bottom_content),
+            extra_metadata=text_metadata(img_bottom_content),
             path=relative_img_path,
             type="image",
             summary=image_summary,

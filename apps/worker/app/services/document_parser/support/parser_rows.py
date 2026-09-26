@@ -13,7 +13,7 @@ from shared.core.config import settings
 # additive, so we guarantee their presence even when a deployment's stale
 # ``ALL_DF_COLS`` env still lists only the legacy 11 columns — otherwise the
 # named-column writes below would raise ``ValueError`` at import time.
-_REQUIRED_TRAILING_COLUMNS: tuple[str, ...] = ("entities", "asset_title")
+_REQUIRED_TRAILING_COLUMNS: tuple[str, ...] = ("entities", "asset_title", "extra_metadata")
 
 
 def _resolve_parser_columns() -> tuple[str, ...]:
@@ -65,6 +65,7 @@ class ParsedRow:
     length: int | None = None
     entities: str = ""
     asset_title: str = ""
+    extra_metadata: dict | None = None
 
     def to_list(self) -> list[object]:
         content_length = self.length if self.length is not None else len(self.content)
@@ -82,6 +83,7 @@ class ParsedRow:
             self.page_nums,
             self.entities,
             self.asset_title,
+            self.extra_metadata or {},
         ]
 
     def to_dict(self) -> dict[str, object]:

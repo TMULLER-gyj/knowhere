@@ -15,7 +15,7 @@ from app.services.document_parser.formats.markdown.deferred_task import (
 from app.services.document_parser.support.parser_rows import ParsedRow, ParsedRowsBuilder
 from shared.services.chunks.path_segments import escape_path_segment
 
-ParserRowValues = list[str | int]
+ParserRowValues = list[str | int | dict[str, Any]]
 
 RowUpdater = Callable[
     [list[ParserRowValues], list[str], str, dict[str, Any], str, str, int, bool],
@@ -156,7 +156,7 @@ class MarkdownParseState:
                     content=str(row_values[0]),
                     path=str(row_values[1]),
                     type=str(row_values[2]),
-                    length=int(row_values[3]),
+                    length=int(str(row_values[3])),
                     keywords=str(row_values[4]),
                     summary=str(row_values[5]),
                     know_id=str(row_values[6]),
@@ -166,6 +166,7 @@ class MarkdownParseState:
                     page_nums=str(row_values[10]),
                     entities=str(row_values[11]) if len(row_values) > 11 else "",
                     asset_title=str(row_values[12]) if len(row_values) > 12 else "",
+                    extra_metadata=row_values[13] if len(row_values) > 13 and isinstance(row_values[13], dict) else {},
                 )
             )
         return process_dup_paths_df(rows_builder.to_dataframe())

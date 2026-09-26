@@ -46,6 +46,7 @@ class TextParseAdapter:
             session.full_output_dir,
             source_type="md",
             md_lines=text_lines,
+            plain_text_source=True,
             base_llm_paras=session.base_llm_paras,
             relative_root=session.relative_root,
         )

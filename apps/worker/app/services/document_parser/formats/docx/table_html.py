@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from docx.table import Table as DocxTable
+from shared.services.chunks.evidence_provenance import join_text, marked
 
 
 def table2html(table: DocxTable, cell_image_map: dict | None = None) -> str:
@@ -27,7 +28,7 @@ def table2html(table: DocxTable, cell_image_map: dict | None = None) -> str:
 
     row_count = len(table.rows)
     if row_count == 0:
-        return "<table border='1'></table>"
+        return marked("<table border='1'></table>", "system")
 
     grid = []
     for row in table.rows:
@@ -88,10 +89,10 @@ def table2html(table: DocxTable, cell_image_map: dict | None = None) -> str:
             else:
                 row_idx += 1
 
-    html_parts = ["<table border='1'>"]
+    html_parts = [marked("<table border='1'>", "system")]
 
     for row_idx in range(row_count):
-        html_parts.append("<tr>")
+        html_parts.append(marked("<tr>", "system"))
         col_idx = 0
         unique_col_idx = 0
 
@@ -111,14 +112,14 @@ def table2html(table: DocxTable, cell_image_map: dict | None = None) -> str:
             colspan = colspan_grid[row_idx][col_idx]
 
             if cell.tables:
-                content = "".join(table2html(nested_table) for nested_table in cell.tables)
+                content = join_text([table2html(nested_table) for nested_table in cell.tables])
             else:
-                content = cell.text.strip().replace("\n", "<br/>")
+                content = marked(cell.text.strip().replace("\n", "<br/>"), "source")
 
             if cell_image_map:
                 image_description = cell_image_map.get((row_idx, unique_col_idx))
                 if image_description:
-                    content += f"<br/><em>{image_description}</em>"
+                    content = join_text([content, marked("<br/><em>", "system"), image_description, marked("</em>", "system")])
 
             attrs = []
             if colspan > 1:
@@ -127,12 +128,12 @@ def table2html(table: DocxTable, cell_image_map: dict | None = None) -> str:
                 attrs.append(f'rowspan="{rowspan}"')
 
             attr_str = " " + " ".join(attrs) if attrs else ""
-            html_parts.append(f"<td{attr_str}>{content}</td>")
+            html_parts.append(join_text([marked(f"<td{attr_str}>", "system"), content, marked("</td>", "system")]))
 
             unique_col_idx += 1
             col_idx += colspan
 
-        html_parts.append("</tr>")
+        html_parts.append(marked("</tr>", "system"))
 
-    html_parts.append("</table>")
-    return "".join(html_parts)
+    html_parts.append(marked("</table>", "system"))
+    return join_text(html_parts)

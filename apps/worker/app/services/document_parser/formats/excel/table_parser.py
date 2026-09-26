@@ -28,6 +28,8 @@ from loguru import logger
 from shared.core.exceptions.domain_exceptions import TableParsingException
 from shared.core.exceptions.knowhere_exception import KnowhereException
 from shared.services.chunks.path_segments import join_document_path
+from shared.services.chunks.evidence_provenance import encode_provenance
+from app.services.document_parser.tables.html_provenance import annotate_table_html
 from app.services.common.file_loading import load_file_bytes
 from app.services.common.file_utils import path_handle
 from shared.utils.text_utils import tokenize2stw_remove
@@ -171,6 +173,7 @@ def _parse_excel_sheet(
             file_name=request.file_name,
             sheet_name=logical_sheet_name,
             row_header_cols=row_header_cols,
+            escape=True,  # A workbook cell containing HTML is still cell text.
         )
 
         parsed_rows.append(
@@ -259,6 +262,10 @@ def _write_excel_table_asset(
             asset_path=f"tables/{table_name}",
             entities=entities,
             asset_title=title or "",
+            # Summaries stay in metadata, never in this cell-derived HTML asset.
+            extra_metadata={"table_evidence_provenance": encode_provenance(
+                annotate_table_html(table_html_string, text_kind="source")
+            )},
         )
     )
 

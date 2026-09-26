@@ -107,6 +107,7 @@ def _cache_shape_digest(
     payload += "|document_scope_v1|" + repr(
         None if include_document_ids is None else sorted(set(include_document_ids))
     )
+    payload += "|evidence_attribution_v1|evidence_provenance_v1"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

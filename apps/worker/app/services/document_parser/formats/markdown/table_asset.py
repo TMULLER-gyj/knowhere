@@ -15,6 +15,8 @@ from app.services.document_parser.formats.markdown.parse_state import ParserRowV
 from app.services.document_parser.tables.table_text_parser import sanitize_table_name_from_header
 
 from shared.utils.chunk_refs import build_chunk_ref
+from shared.services.chunks.evidence_provenance import encode_provenance, marked
+from app.services.document_parser.tables.html_provenance import annotate_table_html
 from app.services.common.file_utils import path_handle
 
 
@@ -35,6 +37,7 @@ class MarkdownTableAssetRequest:
     summary_table: bool
     row_index: int
     image_refs: list[str] | None = None
+    plain_text_source: bool = False
 
 
 def build_markdown_table_asset(
@@ -51,9 +54,9 @@ def build_markdown_table_asset(
     )
     relative_table_path = f"tables/{table_name}.html"
     table_ref = build_chunk_ref(relative_table_path)
-    table_content_item = f"\n{table_ref}\n"
+    table_content_item = marked(f"\n{table_ref}\n", "system")
     table_path = os.path.join(request.table_dir, f"{table_name}.html")
-    _write_table_html(table_path=table_path, table_html=request.table_html)
+    stored_html = _write_table_html(table_path=table_path, table_html=request.table_html)
 
     table_row = build_table_asset_row(
         relative_path=relative_table_path,
@@ -62,6 +65,9 @@ def build_markdown_table_asset(
         know_id=gen_str_codes((request.table_html + str(request.table_count))),
         addtime=request.timestamp,
         image_refs=request.image_refs or [],
+        extra_metadata={"table_evidence_provenance": encode_provenance(
+            annotate_table_html(stored_html, text_kind="source" if request.plain_text_source else "unknown")
+        )},
     )
 
     deferred_task = None
@@ -88,10 +94,11 @@ def _sanitize_table_file_stem(raw_name: str) -> str:
     return table_name
 
 
-def _write_table_html(*, table_path: str, table_html: str) -> None:
+def _write_table_html(*, table_path: str, table_html: str) -> str:
     table_html_with_border = table_html.replace("<table>", "<table border='1'>").replace(
         "<table ",
         "<table border='1' ",
     )
     with open(table_path, "w", encoding="utf-8") as table_file:
         table_file.write(table_html_with_border)
+    return table_html_with_border

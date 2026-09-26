@@ -48,6 +48,7 @@ from shared.utils.chunk_refs import build_chunk_ref, has_chunk_ref
 from app.services.common.file_loading import load_file_bytes
 from app.services.common.file_utils import path_handle
 from shared.utils.text_utils import tokenize2stw_remove
+from shared.services.chunks.evidence_provenance import join_text, marked, strip_text, text_metadata, encode_provenance
 
 
 def get_leaf_dics(node, path=[]):
@@ -261,14 +262,14 @@ def _format_cell_image_descriptions(
     formatted_descriptions = []
     for image_hash, image_index in descriptions:
         if image_summary_scheduler is None:
-            formatted_descriptions.append(f"[{image_index}]")
+            formatted_descriptions.append(marked(f"[{image_index}]", "system"))
         else:
-            image_description = image_summary_scheduler.get_description(
+            image_description = image_summary_scheduler.get_description_text(
                 image_hash,
                 image_index,
             )
-            formatted_descriptions.append(f"[{image_description}]")
-    return " ".join(formatted_descriptions)
+            formatted_descriptions.append(join_text([marked("[", "system"), image_description, marked("]", "system")]))
+    return join_text(formatted_descriptions, " ")
 
 
 def handle_table(
@@ -460,9 +461,9 @@ def handle_table(
     tb_ref = build_chunk_ref(table_asset.relative_path)
     # Build table_ref for heading_stack: optional LLM summary + table path ref
     if llm_summary:
-        table_ref = f"\n{llm_summary}\n{tb_ref}\n"
+        table_ref = join_text([marked("\n", "system"), marked(llm_summary, "generated-summary"), marked(f"\n{tb_ref}\n", "system")])
     else:
-        table_ref = f"\n{tb_ref}\n"
+        table_ref = marked(f"\n{tb_ref}\n", "system")
     headings_stack[-1]["content"].append(table_ref)
     df_list.append(
         build_table_asset_row(
@@ -473,6 +474,7 @@ def handle_table(
             addtime=time_stamp,
             entities=tb_entities,
             asset_title=(llm_title or ""),
+            extra_metadata={"table_evidence_provenance": encode_provenance(tb_html_str)},
         ).to_list()
     )
     return headings_stack, df_list, img_count
@@ -586,7 +588,7 @@ def parse_docx(
             # plain texts
             else:
                 text = remove_spaces(text)
-                headings_stack[-1]["content"].append(text)
+                headings_stack[-1]["content"].append(marked(text, "source"))
 
         elif label == "IMAGE":
             headings_stack = asset_accumulator.append_image(
@@ -639,6 +641,7 @@ def _row_values_to_parsed_row(row_values) -> ParsedRow:
         page_nums=str(_get(10)),
         entities=str(_get(11)),
         asset_title=str(_get(12)),
+        extra_metadata=_get(13, {}) if isinstance(_get(13, {}), dict) else None,
     )
 
 
@@ -667,7 +670,7 @@ def convert_doc2dics(
 
         # Skip leaf nodes with no actual content (empty heading-only sections)
         content_lst = row["content_lst"]
-        joined = "\n".join(content_lst).strip()
+        joined = strip_text(join_text(content_lst, "\n"))
         if not joined:
             logger.debug(f"Skipping empty leaf node: {key}")
             continue
@@ -713,7 +716,8 @@ def convert_doc2dics(
                 )
             df_list.append(
                 ParsedRow(
-                    content=bottom_content,
+                    content=str(bottom_content),
+                    extra_metadata=text_metadata(bottom_content),
                     path=know_path,
                     type=match_type,
                     keywords=keywords,

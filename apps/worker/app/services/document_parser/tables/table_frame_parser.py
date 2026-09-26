@@ -169,12 +169,13 @@ def parse_tb_contents(
     file_name: str = "",
     sheet_name: str = "",
     row_header_cols: int = 0,
+    escape: bool = False,
 ) -> tuple[list[str], str]:
     if parent_dic is None:
         parent_dic = {}
 
     rendered_frame = table_frame.fillna("").infer_objects(copy=False)
-    table_html = df2html(rendered_frame, row_header_cols=row_header_cols)
+    table_html = df2html(rendered_frame, row_header_cols=row_header_cols, escape=escape)
 
     table_tree = tb_columns_to_tree(table_frame, parent_dic, file_name, sheet_name)
     table_paths = flatten_dic2paths(table_tree)

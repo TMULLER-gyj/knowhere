@@ -252,6 +252,13 @@ def test_docx_table_image_summary_is_applied_before_html_render(
     table_path = tmp_path / str(rows[1][1])
     table_html = table_path.read_text(encoding="utf-8")
     assert "<td>first</td><td>second<br/><em>[table cell summary]</em></td>" in table_html
+    from shared.services.chunks.evidence_provenance import decode_provenance
+    from app.services.document_parser.support.parser_rows import PARSER_ROW_COLUMNS
+    binding = rows[1][PARSER_ROW_COLUMNS.index("extra_metadata")]["table_evidence_provenance"]
+    segments = decode_provenance(table_html, binding).segments
+    assert ("second", "source") in segments
+    assert ("table cell summary", "generated-image-description") in segments
+    assert all(kind != "unknown" for _, kind in segments)
 
 
 def test_docx_image_summary_failure_keeps_fallback_reference(

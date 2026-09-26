@@ -46,6 +46,7 @@ def extract_table_embedded_images(
     output_dir: str,
     image_dir: str,
     summary_image: bool,
+    plain_text_source: bool = False,
 ) -> TableEmbeddedImagesResult:
     """Pull <img> assets out of a table, rename them, and rewrite HTML srcs.
 
@@ -88,6 +89,7 @@ def extract_table_embedded_images(
                 summary_image=summary_image,
                 row_index=len(parser_state.rows) + len(image_assets),
                 rename_on_summary=False,
+                plain_text_source=plain_text_source,
             )
         )
         if image_asset.discarded_undersized:

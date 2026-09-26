@@ -42,26 +42,34 @@ async def assemble_retrieval_results(
         document_scope=document_scope,
         revision_pins=revision_pins,
     )
-    rows_by_chunk_id = {
-        str(row.get('chunk_id') or ''): row
-        for row in [*scoped_rows, *hydrated_rows]
-        if row.get('chunk_id')
-    }
-    filtered_rows = _filter_rows_by_allowed_chunk_types(
-        scoped_rows,
-        allowed_chunk_types=allowed_chunk_types,
-        rows_by_chunk_id=rows_by_chunk_id,
-    )
+    # Chunk ids are content-derived and may repeat across documents/revisions.
+    # Each composer must see only the containing row's own revision assets.
+    rows_by_owner: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
+    for row in [*scoped_rows, *hydrated_rows]:
+        if row.get('chunk_id'):
+            rows_by_owner.setdefault(_row_owner(row), {})[str(row['chunk_id'])] = row
+    filtered_rows = [
+        row for row in scoped_rows
+        if _filter_rows_by_allowed_chunk_types(
+            [row], allowed_chunk_types=allowed_chunk_types,
+            rows_by_chunk_id=rows_by_owner.get(_row_owner(row), {}),
+        )
+    ]
 
-    embedded_targets: set[str] = set()
+    embedded_targets: set[tuple[tuple[str, str], str]] = set()
     for row in filtered_rows:
         for target_id in iter_connected_target_ids(row):
-            if target_id in rows_by_chunk_id:
-                embedded_targets.add(target_id)
+            # Standalone table rows may carry their own asset reference. Only
+            # another row's embedding can suppress a top-level result.
+            if (
+                target_id != str(row.get('chunk_id') or '')
+                and target_id in rows_by_owner.get(_row_owner(row), {})
+            ):
+                embedded_targets.add((_row_owner(row), target_id))
 
     assembled: list[dict[str, Any]] = []
     for row in filtered_rows:
-        if row.get('chunk_id') in embedded_targets:
+        if (_row_owner(row), str(row.get('chunk_id') or '')) in embedded_targets:
             continue
         assembled_row = dict(row)
         base_content = str(row.get('content') or '')
@@ -77,10 +85,14 @@ async def assemble_retrieval_results(
             assembled_row['content_source'] = 'content'
         assembled_row['composed'] = compose_evidence_parts(
             assembled_row,
-            rows_by_chunk_id,
+            rows_by_owner.get(_row_owner(row), {}),
         )
         assembled.append(assembled_row)
     return assembled
+
+
+def _row_owner(row: dict[str, Any]) -> tuple[str, str]:
+    return (str(row.get('document_id') or ''), str(row.get('job_result_id') or ''))
 
 
 def _filter_rows_by_allowed_chunk_types(

@@ -21,6 +21,7 @@ class TableAssetInput:
     asset_path: str | None = None
     entities: str = ""
     asset_title: str = ""
+    extra_metadata: dict | None = None
 
 
 def write_table_asset(table_input: TableAssetInput) -> ParsedRow:
@@ -48,6 +49,7 @@ def write_table_asset(table_input: TableAssetInput) -> ParsedRow:
         length=len(row_content),
         entities=table_input.entities,
         asset_title=table_input.asset_title,
+        extra_metadata=table_input.extra_metadata,
     )
 
 

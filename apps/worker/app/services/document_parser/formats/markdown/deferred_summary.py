@@ -12,6 +12,7 @@ from app.services.document_parser.formats.markdown.deferred_task import (
     TableDeferredSummaryTask,
     TextDeferredSummaryTask,
 )
+from app.services.document_parser.formats.markdown.parse_state import ParserRowValues
 from app.services.document_parser.support.stage_profiler import stage_timer
 from app.services.document_parser.tables.table_text_parser import sanitize_table_name_from_header
 from app.services.document_parser.support.parser_rows import (
@@ -19,6 +20,7 @@ from app.services.document_parser.support.parser_rows import (
     COL_ENTITIES,
     COL_KEYWORDS,
     COL_SUMMARY,
+    PARSER_ROW_COLUMNS,
     apply_body_summary,
     serialize_entities,
 )
@@ -29,6 +31,7 @@ from shared.core.config import settings
 from shared.services.ai.summary.engine import summarize
 from shared.services.ai.summary.model import AssetSummary, BodySummary
 from shared.utils.chunk_refs import build_chunk_ref
+from shared.services.chunks.evidence_provenance import decode_provenance, marked, replace_text, text_metadata
 from app.services.common.file_utils import MAX_ASSET_FILE_NAME_CHARS, path_handle
 
 # Each deferred task now carries the engine's typed contract straight through to
@@ -40,7 +43,7 @@ DeferredResult = tuple[int, Literal["image", "table", "text"], object]
 
 @dataclass(frozen=True)
 class MarkdownDeferredSummaryInput:
-    rows: list[list[str | int]]
+    rows: list[ParserRowValues]
     tasks: list[MarkdownDeferredSummaryTask]
     output_dir: str
     summary_len: int = 1500
@@ -81,7 +84,7 @@ def apply_markdown_deferred_summaries(
 
 
 def replace_chunk_ref_in_rows(
-    rows: list[list[str | int]], old_path: str, new_path: str
+    rows: list[ParserRowValues], old_path: str, new_path: str
 ) -> None:
     """Rewrite asset paths after deferred rename.
 
@@ -106,7 +109,16 @@ def replace_chunk_ref_in_rows(
                 updated = new_path
             elif old_path in updated:
                 updated = updated.replace(old_path, new_path)
+            metadata_index = PARSER_ROW_COLUMNS.index("extra_metadata")
+            metadata = row[metadata_index] if len(row) > metadata_index else None
+            if isinstance(metadata, dict):
+                annotated = decode_provenance(str(row[0]), metadata.get("evidence_provenance"))
+                annotated = replace_text(annotated, old_path, marked(new_path, "system"))
+                if str(annotated) == updated:
+                    metadata.update(text_metadata(annotated))
             row[0] = updated
+            if len(row) > 3:
+                row[3] = len(updated)
         if len(row) > 1 and row[1] == old_path:
             row[1] = new_path
         if len(row) > 2 and isinstance(row[2], str):
@@ -235,7 +247,7 @@ def _get_table_task(task: MarkdownDeferredSummaryTask) -> TableDeferredSummaryTa
 
 
 def _apply_asset_result_preserving_index(
-    row: list[str | int], result: AssetSummary
+    row: ParserRowValues, result: AssetSummary
 ) -> None:
     """Write an asset result onto a markdown row, keeping the summary's index tag.
 
@@ -260,13 +272,34 @@ def _apply_asset_result_preserving_index(
 
 
 def _apply_image_summary_result(
-    rows: list[list[str | int]],
+    rows: list[ParserRowValues],
     original_task: ImageDeferredSummaryTask,
     row_index: int,
     result: AssetSummary,
 ) -> None:
     row = rows[row_index]
     _apply_asset_result_preserving_index(row, result)
+    if result.summary:
+        # Insert at the known asset token, never search for generated prose.
+        from shared.services.chunks.evidence_provenance import join_text
+
+        ref = build_chunk_ref(original_task.relative_path)
+        metadata_index = PARSER_ROW_COLUMNS.index("extra_metadata")
+        for target in rows:
+            if ref not in str(target[0]):
+                continue
+            while len(target) <= metadata_index:
+                target.append("")
+            metadata = target[metadata_index]
+            metadata = dict(metadata) if isinstance(metadata, dict) else {}
+            content = decode_provenance(str(target[0]), metadata.get("evidence_provenance"))
+            content = replace_text(content, ref, join_text([
+                marked(result.summary, "generated-image-description"),
+                marked(f"\n{ref}", "system"),
+            ]))
+            target[0] = str(content)
+            target[3] = len(content)
+            target[metadata_index] = {**metadata, **text_metadata(content)}
 
     # Table-embedded images keep a stable filename so <img src> in
     # tables/*.html stays valid after summary generation.
@@ -307,7 +340,7 @@ def _apply_image_summary_result(
 
 
 def _apply_table_summary_result(
-    rows: list[list[str | int]],
+    rows: list[ParserRowValues],
     original_task: TableDeferredSummaryTask,
     row_index: int,
     result: AssetSummary,

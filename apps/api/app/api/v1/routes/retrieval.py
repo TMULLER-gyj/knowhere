@@ -156,7 +156,10 @@ class RetrievalQueryResponse(BaseModel):
     router_used: str
     evidence: list[dict] = Field(
         default_factory=list,
-        description="Composed evidence parts (text and inline images) for downstream agents.",
+        description=(
+            "Composed evidence parts (text and inline images) for downstream agents. "
+            "Each part carries chunk_id and document_id of its containing result row."
+        ),
     )
     evidence_text: str = Field(
         default="",

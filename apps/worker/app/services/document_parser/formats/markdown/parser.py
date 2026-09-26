@@ -189,7 +189,9 @@ def update_df_list(
     # Separate pure text from IMAGE/TABLE ref blocks for deterministic know_id
     text_items = [item for item in content_items if not has_chunk_ref(str(item))]
     pure_text = "\n".join(text_items).strip()
-    bottom_content = "\n".join(content_items).strip()
+    from shared.services.chunks.evidence_provenance import join_text, strip_text, text_metadata
+
+    bottom_content = strip_text(join_text(content_items, "\n"))
 
     match_type = find_matches_parsing(bottom_content, path)
     know_id_source = pure_text if pure_text else f"{path or ''}::{page_nums or ''}"
@@ -222,6 +224,7 @@ def update_df_list(
             addtime=time_stamp,
             page_nums=page_nums,
             entities=entities,
+            extra_metadata=text_metadata(bottom_content),
         ).to_list()
     )
     return df_list
@@ -238,6 +241,7 @@ def parse_md(
     lines_with_heading=None,
     is_first_shard=True,
     skip_toc_detection=False,
+    plain_text_source=False,
 ):
     if lines_with_heading is not None:
         # ── Phase A bypass ──
@@ -400,6 +404,7 @@ def parse_md(
                         seen_images=parser_state.seen_images,
                         summary_image=bool(base_llm_paras["summary_image"]),
                         row_index=len(parser_state.rows),
+                        plain_text_source=plain_text_source,
                     )
                 )
                 if (
@@ -454,6 +459,7 @@ def parse_md(
                     output_dir=output_dir,
                     image_dir=img_dir,
                     summary_image=bool(base_llm_paras["summary_image"]),
+                    plain_text_source=plain_text_source,
                 )
                 for image_asset in embedded.image_assets:
                     if image_asset.row_values is not None:
@@ -461,7 +467,9 @@ def parse_md(
                     if image_asset.deferred_task is not None:
                         parser_state.schedule_deferred_task(image_asset.deferred_task)
                 for image_ref in embedded.image_refs:
-                    parser_state.append_content_item(f"\n{image_ref}\n")
+                    from shared.services.chunks.evidence_provenance import marked
+
+                    parser_state.append_content_item(marked(f"\n{image_ref}\n", "system"))
 
                 table_asset = build_markdown_table_asset(
                     MarkdownTableAssetRequest(
@@ -472,6 +480,7 @@ def parse_md(
                         summary_table=bool(base_llm_paras["summary_table"]),
                         row_index=len(parser_state.rows),
                         image_refs=embedded.image_refs,
+                        plain_text_source=plain_text_source,
                     )
                 )
                 parser_state.append_content_item(table_asset.content_item)
@@ -483,7 +492,14 @@ def parse_md(
 
             # c. handle plain texts
             if len(imgs) == 0 and not tb_bool:
-                parser_state.append_plain_text(line)
+                if plain_text_source:
+                    # Only the raw-text adapter grants this authority. PDF/OCR and
+                    # other Markdown producers may already contain generated text.
+                    from shared.services.chunks.evidence_provenance import marked
+
+                    parser_state.append_content_item(marked(line.strip(), "source"))
+                else:
+                    parser_state.append_plain_text(line)
 
     if parser_state.content_items:
         parser_state.flush_current_content()

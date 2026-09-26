@@ -19,6 +19,7 @@ from app.services.document_parser.formats.markdown.parse_state import ParserRowV
 from loguru import logger
 
 from shared.utils.chunk_refs import build_chunk_ref
+from shared.services.chunks.evidence_provenance import join_text, marked, Provenance
 from app.services.common.file_utils import MAX_ASSET_FILE_NAME_CHARS, path_handle
 
 
@@ -48,6 +49,7 @@ class MarkdownImageAssetRequest:
     summary_image: bool
     row_index: int
     rename_on_summary: bool = True
+    plain_text_source: bool = False
 
 
 def build_markdown_image_asset(
@@ -87,13 +89,16 @@ def build_markdown_image_asset(
     os.rename(source_path, target_image_path)
 
     image_index = f"image-{request.image_count}"
-    effective_summary = request.image_summary or request.last_context or None
+    effective_summary = request.last_context or None
+    # image_summary from detect_summary_img_md includes a synthetic ordinal;
+    # it is a naming placeholder, not source prose.
     image_summary_field = (
         f"{image_index}\n{effective_summary}" if effective_summary else image_index
     )
     image_content = _build_image_content(
         relative_image_path=relative_image_path,
         summary=effective_summary,
+        summary_provenance="source" if request.plain_text_source else "unknown",
     )
     image_know_id = gen_str_codes(image_binary_hash)
     row_values = _build_image_row_values(
@@ -206,11 +211,15 @@ def _build_duplicate_image_asset(
     )
 
 
-def _build_image_content(*, relative_image_path: str, summary: str | None) -> str:
+def _build_image_content(
+    *, relative_image_path: str, summary: str | None,
+    summary_provenance: Provenance = "unknown",
+) -> str:
     image_reference = build_chunk_ref(relative_image_path)
-    if summary:
-        return f"\n{summary}\n{image_reference}\n"
-    return f"\n{image_reference}\n"
+    return join_text([
+        marked("\n", "system"), marked(summary or "", summary_provenance),
+        marked(f"\n{image_reference}\n" if summary else f"{image_reference}\n", "system"),
+    ])
 
 
 def _build_image_row_values(

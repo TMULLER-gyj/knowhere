@@ -15,9 +15,11 @@ from app.services.document_parser.support.parser_rows import (
     COL_ASSET_TITLE,
     COL_ENTITIES,
     COL_SUMMARY,
+    PARSER_ROW_COLUMNS,
     serialize_entities,
 )
 from shared.core.config import settings
+from shared.services.chunks.evidence_provenance import ProvenanceText, join_text, marked, text_metadata
 from shared.services.ai.summary.model import AssetSummary
 
 
@@ -128,6 +130,12 @@ class DocxImageSummaryScheduler:
             return result.summary
         return image_index
 
+    def get_description_text(self, image_hash: str, image_index: str):
+        result = self._results_by_hash.get(image_hash)
+        if result is not None and result.summary:
+            return marked(result.summary, "generated-image-description")
+        return marked(image_index, "system")
+
     def _run_batch(
         self,
         tasks: list[DocxImageSummaryTask],
@@ -181,6 +189,9 @@ class DocxImageSummaryScheduler:
             f"{occurrence.image_index}\n{summary}" if summary else occurrence.image_index
         )
         occurrence.row[0] = _build_image_ref(relative_path, summary)
+        while len(occurrence.row) < len(PARSER_ROW_COLUMNS):
+            occurrence.row.append("")
+        occurrence.row[PARSER_ROW_COLUMNS.index("extra_metadata")] = text_metadata(occurrence.row[0])
         occurrence.row[1] = relative_path
         occurrence.row[3] = len(str(occurrence.row[0]))
         occurrence.row[COL_SUMMARY] = summary_field
@@ -233,13 +244,13 @@ def build_fallback_image_ref(relative_path: str) -> str:
     return _build_image_ref(relative_path, "")
 
 
-def _build_image_ref(relative_path: str, summary: str) -> str:
+def _build_image_ref(relative_path: str, summary: str) -> ProvenanceText:
     from shared.utils.chunk_refs import build_chunk_ref
 
     img_ref = build_chunk_ref(relative_path)
     if summary:
-        return f"\n{summary}\n{img_ref}\n"
-    return f"\n{img_ref}\n"
+        return join_text([marked("\n", "system"), marked(summary, "generated-image-description"), marked(f"\n{img_ref}\n", "system")])
+    return marked(f"\n{img_ref}\n", "system")
 
 
 def _run_summary_task(task: DocxImageSummaryTask) -> AssetSummary | None:
